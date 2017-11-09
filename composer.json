@@ -1,0 +1,8 @@
+{
+    "name": "cyssxt/image_utils",
+    "description": "图片生工具（）\u001b[Dcconvert json to image resource()\u001b[",
+    "type": "library",
+    "license": "BSD",
+    "minimum-stability": "beta",
+    "require": {}
+}
