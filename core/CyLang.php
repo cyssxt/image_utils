@@ -8,7 +8,7 @@
 
 class CyLang{
     private $param_reg='/\{\{([^#{}]+)\}\}/';
-    private $fun_reg='/##(.*\))##/';
+    private $fun_reg='/"##([^"]+\))##"/';
 //    private $param_reg='/(aaa)/';
     private $json = null;
 
@@ -47,11 +47,14 @@ class CyLang{
         $tmpValue = $value;
         foreach($matches_1 as $match){
             $v = $this->parse($match[0]);
-            eval("\$v=".$v.";");
+            $v = str_replace("\\\\","\\",$v);
+            $eval = "\$v=".$v.";";
+            eval($eval);
 //            if(is_array($v)){
 //                $v = CyLang::arrayToStr($v);
 //            }
-            $tmpValue  = str_replace("##".$match[0]."##",json_encode($v),$tmpValue);
+            $val = json_encode($v);
+            $tmpValue  = str_replace("\"##".$match[0]."##\"",$val,$tmpValue);
         }
         $tmpValue = $this->parse($tmpValue);
         return $tmpValue;
@@ -63,7 +66,8 @@ class CyLang{
         $tmpValue = $value;
         foreach ($matches_1 as $match){
             $v = $this->getFieldValue($match[0],$this->json);
-            $tmpValue  = str_replace("{{".$match[0]."}}",$v,$tmpValue);
+            $replaceStr ="{{".$match[0]."}}";
+            $tmpValue  = str_replace($replaceStr,$v,$tmpValue);
         }
         return $tmpValue;
     }
@@ -79,31 +83,19 @@ class CyLang{
             $data = $data[$r];
         }
         if(is_array($data)){
-            return CyLang::ArrayToStr($data);
+            return \CommonUtils\parseArray($data);
         }
         return $data;
     }
 
-    static function arrayToStr($data){
-        $d = "array(";
-        foreach ($data as $k=>$v) {
-            $tmp = sprintf("'%s'=>'%s'",$k,$v);
-            if(is_numeric($v)){
-                $tmp=sprintf("'%s'=>%s",$k,$v);
-            }
-            $d = $d.$tmp.",";
-        }
-        $d = $d.")";
-        return $d;
-    }
 
 }
-
-function test(){
-    $data = json_decode(file_get_contents("../data.json"),true);
-    $cy = new CyLang($data);
-    echo $cy->parse("{{data.type}}['{{data.key}}']");
-}
+//
+//function test(){
+//    $data = json_decode(file_get_contents("../data.json"),true);
+//    $cy = new CyLang($data);
+//    echo $cy->parse("{{data.type}}['{{data.key}}']");
+//}
 
 //test();
 //eval("\$tmpValue=array('key'=>'huo','icon'=>'binghuo.png','name'=>'丙火型','desc'=>'壬水具有像江河、 大海般豪放不拘的性质，最具有动态、好动的特性。像江海的水会不停到处流动，四处汇聚所有的河流，融入各式各样的东西，所以最能包容各种事物，“不执着”是其最大的特色，而且因为能包容所以学习能力也最强。',)['key'];");
