@@ -57,9 +57,10 @@ class ImageGenerator
         $bgColor = call_user_func_array("imagecolorallocate", $paramTmp);
         imagefill($this->desImage,0,0,$bgColor);
         if($bgImage){
-            $this->drawImage($bgImage,0,0,0,0,$this->width*$this->scale,$this->height*$this->scale,true,true);
+            $this->drawImage($bgImage,0,0,0,0,$this->width,null,false,true);
         }
         $this->padding = \CommonUtils\getProperty($selectParams,PADDING,0);
+        $this->currentY = $this->currentY+$this->padding;
     }
     function setFontPath($path){
         $this->fontPath = $path;
@@ -129,7 +130,7 @@ class ImageGenerator
             $desHeight = $desWidth*$fullHeight/$fullWidth;
         }
         if($flag){
-            $imageWidth = $this->width;
+            $imageWidth = $this->width*$this->scale;
             $dx = ($imageWidth-$desWidth)/2;
         }
         imagecopyresampled($this->desImage,$src,$dx,$dy,$sw,$sy,$desWidth,$desHeight,$fullWidth,$fullHeight);
@@ -150,56 +151,67 @@ class ImageGenerator
         $fontSize = \CommonUtils\getProperty($detail,"fontSize");
         $color = \CommonUtils\getProperty($detail,"color");
         $marginTop = \CommonUtils\getProperty($detail,"marginTop");
-        $textWidth = \CommonUtils\getProperty($detail,"width");
+        $textWidth = \CommonUtils\getProperty($detail,"width",$this->width);
         $lineHeight = \CommonUtils\getProperty($detail,"lineHeight");
         $textAlign = \CommonUtils\getProperty($detail,TEXT_ALIGN,false);
+        $verticalAlign = \CommonUtils\getProperty($detail,"vertialAlign",false);
         $marginLeft = \CommonUtils\getProperty($detail,"marginLeft",0)*$this->scale;
         $prefix = \CommonUtils\getProperty($detail,"prefix");
+        $bgColor = \CommonUtils\getProperty($detail,"bgColor");
         $this->currentY = $this->currentY+$marginTop*$this->scale;
         $lineHeight = $lineHeight*$this->scale;
         $fontSize = $fontSize*$this->scale;
-        $dx = null;
+        $dx = $marginLeft;
         $prefixWidth=0;
+        $center = $textAlign=="center";
         if($prefix){
             $prefixMarginLeft = \CommonUtils\getProperty($prefix,"marginLeft")*$this->scale;
             $prefixWidth = \CommonUtils\getProperty($prefix,"width")*$this->scale;
             $prefixHeight = \CommonUtils\getProperty($prefix,"height")*$this->scale;
             $prefixColor = \CommonUtils\getProperty($prefix,"color");
-            $dx = $prefixMarginLeft+$prefixWidth/2;
+            if($textAlign=="center"){
+                $dx = ($this->width-$textWidth)/2;
+            }
+            $dx = $dx+$prefixMarginLeft+$prefixWidth;
+            $textWidth = $textWidth*$this->scale - $prefixWidth*2-$prefixMarginLeft;
+            $center = false;
         }
-        if($textAlign=="center"){
-            $dx = -1;
+        $dy = $this->currentY;
+        if($bgColor){
+            $this->drawRectByDetail($detail);
         }
-        list($width,$height) = $this->drawText($content,$fontSize,$color,$dx,$this->currentY,$textWidth,null,$lineHeight);
+        list($width,$height) = $this->drawText($content,$fontSize,$color,$dx,$dy,$textWidth,null,$lineHeight,$center,$bgColor?true:false);
         if($prefix){
-            $this->drawCircle($dx,$this->currentY-$height/2,$prefixWidth,$prefixHeight,$prefixColor);
+            $dy = $dy+$height/2;
+            $this->drawCircle($dx-$prefixMarginLeft-$prefixWidth,$dy,$prefixWidth,$prefixHeight,$prefixColor);
         }
     }
 
-    function drawText($text,$fontSize,$color,$x,$y,$width=null,$fontPath=null,$lineHeight=null,$angle=0,$filter=false,$pWidth=null){
+    function drawText($text,$fontSize,$color,$x,$y,$width=null,$fontPath=null,$lineHeight=null,$center=false,$filter=false,$pWidth=null,$angle=0){
         $fontPath = $fontPath?$fontPath:$this->fontPath;
         list($left_bottom_x,$left_bottom_y,$right_bottom_x,$right_bottom_y,$right_top_x,$right_top_y,$left_top_x,$left_top_y) = imagettfbbox($fontSize,$angle,$fontPath,$text);
-        if(!$width){
-            $width = $right_bottom_x-$left_bottom_x;
-        }else{
-            $width = $width*$this->scale;
-        }
-        $height = $right_bottom_y-$right_top_y;
-        if(!$x || $x==-1){
-            $x = ($this->width*$this->scale-$width)/2;
-        }else{
-            if($pWidth){
-                $x = $x+($pWidth-$width)/2;
+        $textWidth = $right_bottom_x-$left_bottom_x;
+        $width = $width?$width*$this->scale:$this->width*$this->scale;
+        $textHeight = $right_bottom_y-$right_top_y;
+        $tmpY = 0;
+        if($center){
+            if($textWidth>$width){
+                $pWidth = $pWidth?$pWidth:$this->width;
+                $x = $x + ($pWidth-$width)/2;
+            }else{
+                $x = $x+($width-$textWidth)/2;
             }
         }
-        if(!$filter){
-            $this->currentY = $y+$height;
+        if($center&&$lineHeight>0){
+            $textHeight = $right_bottom_y-$right_top_y;
+            $tmpY = ($lineHeight-$textHeight)/2;
         }
-        $this->drawTextAutoSpace($text,$fontSize,$color,$x,$y+$height,$width,null,$lineHeight);
-        return Array($width,$height);
+        $y = $tmpY+$y+$textHeight;
+        $this->drawTextAutoSpace($text,$fontSize,$color,$x,$y,$width,null,$lineHeight,$filter);
+        return Array($textWidth,$textHeight);
     }
 
-    function drawTextAutoSpace($text,$fontSize,$color,$x,$y,$width,$fontPath=null,$lineHeight=null,$angle=0){
+    function drawTextAutoSpace($text,$fontSize,$color,$x,$y,$width,$fontPath=null,$lineHeight=null,$filter=false,$angle=0){
         if(empty($text)){
             return;
         }
@@ -224,20 +236,24 @@ class ImageGenerator
             if($tmpWidth+$charWidth<$width||$i==$len-1){
                 $tmpStr = $tmpStr.$char;
                 if($i==$len-1){
-                    $this->currentY = $this->currentY+$lineHeight;
+                    if(!$filter){
+                        $this->currentY = $y;//$lineHeight;
+                    }
                     imagettftext($this->desImage,$fontSize,$angle,$x,$y,$fontColor,$fontPath,$tmpStr);
                 }
             }else{
                 imagettftext($this->desImage,$fontSize,$angle,$x,$y,$fontColor,$fontPath,$tmpStr);
-                $subStr = mb_substr($text,$i+1);
-                $this->currentY = $this->currentY+$lineHeight*$height;
+                $subStr = mb_substr($text,$i);
+                if(!$filter){
+                    $this->currentY = $this->currentY+$lineHeight*$height;//+$lineHeight*$height;
+                }
                 $this->drawTextAutoSpace($subStr,$fontSize,$color,$x,$y+$height*$lineHeight,$width,$fontPath,$lineHeight);
                 break;
             }
         }
     }
 
-    function drawRect($x,$y,$width,$height,$color,$radius=0,$border=0){
+    function drawRect($x,$y,$width,$height,$color,$radius=0,$filter=false){
         $params = array_merge(Array($this->desImage),$color);
         $fun = "imagecolorallocate";
         if(count($params)==5){
@@ -247,11 +263,14 @@ class ImageGenerator
         ImageFilledRectangle($this->desImage,$x,$y+$radius,$width+$x,$height-$radius+$y,$fill);
         if($radius>0){
             ImageFilledRectangle($this->desImage,$x+$radius,$y,$x+$width-$radius,$y+$radius,$fill);
-            imagefilledarc($this->desImage,$x+$radius,$y+$radius,$radius*2,$radius*2,180,270,$fill,IMG_ARC_EDGED);
-            imagefilledarc($this->desImage,$x+$width-$radius,$y+$radius,$radius*2,$radius*2,270,360,$fill,IMG_ARC_EDGED);
-            imagefilledarc($this->desImage,$x+$radius,$height+$y-$radius,$radius*2,$radius*2,90,180,$fill,IMG_ARC_EDGED);
+            imagefilledarc($this->desImage,$x+$radius,$y+$radius,$radius*2,$radius*2,180,270,$fill,IMG_ARC_PIE);
+            imagefilledarc($this->desImage,$x+$width-$radius,$y+$radius,$radius*2,$radius*2,270,360,$fill,IMG_ARC_PIE);
+            imagefilledarc($this->desImage,$x+$radius,$height+$y-$radius,$radius*2,$radius*2,90,180,$fill,IMG_ARC_PIE);
             ImageFilledRectangle($this->desImage,$x+$radius,$height+$y-$radius,$x+$width-$radius,$height+$y,$fill);
-            imagefilledarc($this->desImage,$x+$width-$radius,$height+$y-$radius,$radius*2,$radius*2,0,90,$fill,IMG_ARC_EDGED);
+            imagefilledarc($this->desImage,$x+$width-$radius,$height+$y-$radius,$radius*2,$radius*2,0,90,$fill,IMG_ARC_PIE);
+        }
+        if(!$filter){
+            $this->currentY = $y+$height;
         }
     }
 
@@ -292,13 +311,14 @@ class ImageGenerator
             $marginLeft = \CommonUtils\getProperty($content,"marginLeft")*$this->scale;
             $marginBottom = \CommonUtils\getProperty($content,"marginBottom")*$this->scale;
             $contentMarginTop = \CommonUtils\getProperty($content,"marginTop")*$this->scale;
+            $textAlign = CommonUtils\getProperty($content,"textAlign");
             $height = $barTotalHeight*$this->scale * $percent/$maxPercent;
 //            $height = 50;
             $tmpY = $barTotalHeight-$height+$y;
             $nextX = $nextX + $marginLeft;
             $this->drawRect($nextX,$tmpY,$width,$height,$color,$width/2);
-            $this->drawText($text,$contentSize,$color,$nextX,$tmpY-$contentMarginTop,null,null,null,null,true,$width);
-            $this->drawText($title,$titleSize,$titleColor,$nextX,$tmpY+$height+$marginBottom,null,null,null,null,true,$width);
+            $this->drawText($text,$contentSize,$color,$nextX,$tmpY-$contentMarginTop,$width,null,null,$textAlign=="center",true,$width);
+            $this->drawText($title,$titleSize,$titleColor,$nextX,$tmpY+$height+$marginBottom,$width,null,null,$textAlign=="center",true,$width);
             $nextX = $nextX + $width ;
         }
         $this->currentY = $this->currentY+$marginTop+$barTotalHeight*$this->scale;
@@ -312,49 +332,77 @@ class ImageGenerator
         $contents = CommonUtils\getProperty($detail,CONTENT);
         $colNum = CommonUtils\getProperty($detail,COL_NUM);
         $marginTop = CommonUtils\getProperty($detail,"marginTop");
+        $y = $this->currentY;
         $x = 0+$this->padding;
-        $y = $this->currentY+$this->padding;
-        $width = ($this->width*$this->scale-$this->padding*$this->scale*2)/$colNum;
         $rectY = $y+$marginTop*$this->scale;
+        $width = $colNum!=0?($this->width*$this->scale-$this->padding*$this->scale*2)/$colNum:0;
+        $bgColor = $this->getProperty($detail,BG_COLOR,null,null);
         $preHeight=0;
+        if($bgColor){
+            $height = $this->getProperty($detail,HEIGHT,null,null)*$this->scale;
+            $width = $this->getProperty($detail,"width",null,null)*$this->scale;
+            $this->drawRect($x-$this->padding,$y,$width,$height,$bgColor);
+        }
+        $textX = 0;
         for ($i=0;$i<count($contents);$i++) {
             $content = $contents[$i];
-            $height = CommonUtils\getProperty($content,HEIGHT,null,$detail)*$this->scale;
+            $height = $this->getProperty($content,HEIGHT,null,$detail)*$this->scale;
+            $width = $width==0?$this->getProperty($content,"width",null,null)*$this->scale:$width;
             $text = CommonUtils\getProperty($content,CONTENT);
-            $fontSize = $this->getProperty($content,FONT_SIZE,DEFAULT_FONT_SIZE,$detail)*$this->scale;
-            $color = $this->getProperty($content,COLOR,DETAULT_COLOR,$detail);
-            $bgColor = $this->getProperty($content,BG_COLOR,null,$detail);
+            $fontSizes = $this->getProperty($content,FONT_SIZE,DEFAULT_FONT_SIZE,$detail);
+            $colors = $this->getProperty($content,COLOR,DETAULT_COLOR,$detail);
+            $bgColor = $this->getProperty($content,BG_COLOR,null,null);
             $textAlign = $this->getProperty($content,TEXT_ALIGN,null,$detail);
             $borderTop = $this->getProperty($content,BORDER_TOP,null,$detail);
-            list($left_bottom_x,$left_bottom_y,$right_bottom_x,$right_bottom_y,$right_top_x,$right_top_y,$left_top_x,$left_top_y) = imagettfbbox($fontSize,0,$this->fontPath,$text);
-            $textWidth = $right_bottom_x-$left_bottom_x;
-            $textHeight = $right_bottom_y-$right_top_y;
-            $tmpX = $x + ($i%$colNum)*$width;
+            $radius = $this->getProperty($content,"radius",null,$detail);
+            $marginLeft = $this->getProperty($content,"marginLeft",0,null);
+            $texts = preg_split("/,/",$text);
+            if($width==0){
+                throw new ErrorException("show config a width content[".$text."]");
+            }
+            $tmpX = $colNum!=0?($x + ($i%$colNum)*$width):0;
             if(!$height){
                 $height = $width;
             }
             if(!$preHeight){
                 $preHeight = $height;
             }
-            if($i%$colNum==0&&$i!=0){
+            if($colNum!=0&&$i%$colNum==0&&$i!=0){
                 $rectY = $rectY + $preHeight;
                 $preHeight = $height;
             }
-            $tmpY =$rectY+($height-$textHeight)/2;
             $rectX = $tmpX;
-            if($textAlign && $textAlign=="center"){
-                $tmpX = $tmpX + ($width-$textWidth)/2;
-            }
             if($bgColor){
-                $this->drawRect($rectX,$rectY,$width,$height,$bgColor);
+                $this->drawRect($rectX,$rectY,$width,$height,$bgColor,$radius);
             }
-            if($borderTop){
-                $params = array_merge(array($this->desImage),$borderTop);//$borderTop
-                $bgColor = call_user_func_array("imagecolorallocate",$params);
-                imagerectangle($this->desImage,$rectX-1,$rectY-1,$rectX+$width+2,$rectY,$bgColor);
+            for ($j=0;$j<count($texts);$j++){
+                $text = $texts[$j];
+                $font = is_array($fontSizes)?$fontSizes[$j]:$fontSizes;
+                $font = $font*$this->scale;
+                $color = count($colors)==2?$colors[$j]:$colors;
+                list($left_bottom_x,$left_bottom_y,$right_bottom_x,$right_bottom_y,$right_top_x,$right_top_y,$left_top_x,$left_top_y) = imagettfbbox($font,0,$this->fontPath,$text);
+                $textWidth = $right_bottom_x-$left_bottom_x;
+                $textHeight = $right_bottom_y-$right_top_y;
+                $tmpY =$rectY+($height-$textHeight)/2;
+                if(count($texts)>1){
+                    $tmpY =$tmpY-($j%2==0?1:-1)*$height/5;
+                }
+                if($textAlign && $textAlign=="center"){
+                    $resultTextX = $tmpX + ($width-$textWidth)/2;
+                }else{
+                    $resultTextX = $textX+$marginLeft;
+                }
+                if($borderTop){
+                    $params = array_merge(array($this->desImage),$borderTop);//$borderTop
+                    $bgColor = call_user_func_array("imagecolorallocate",$params);
+                    imagerectangle($this->desImage,$rectX-1,$rectY-1,$rectX+$width+2,$rectY,$bgColor);
+                }
+                list($textWidth) = $this->drawText($text,$font,$color,$resultTextX,$tmpY,$width,null,0,0,true);
+//                $this->currentY = $tmpY;
             }
-            $this->drawText($text,$fontSize,$color,$tmpX,$tmpY,$width,null,0,0,true);
-            $this->currentY = $tmpY;
+            if(!$textAlign || $textAlign!="center"){
+                $textX = $resultTextX+$textWidth;
+            }
         }
     }
 
@@ -364,6 +412,19 @@ class ImageGenerator
                 $value = CommonUtils\getProperty($parent,$key);
         }
         return $value?$value:$default;
+    }
+
+    /**
+     * @param $d 画矩形
+     */
+    public function drawRectByDetail($d)
+    {
+        $color = $this->getProperty($d,BG_COLOR,null,null);
+        $width = $this->getProperty($d,"width",null,null)*$this->scale;
+        $height = $this->getProperty($d,"height",null,null)*$this->scale;
+        $dx = $this->getProperty($d,"marginLeft",0,null)*$this->scale;
+        $dy = $this->getProperty($d,"marginRight",0,null)*$this->scale;
+        $this->drawRect($dx,$this->currentY+$dy,$width,$height,$color,true,false);
     }
 
 }

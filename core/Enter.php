@@ -68,6 +68,9 @@ class Enter
                 case "bar":
                     $image->drawBar($d);
                     break;
+                case "rect":
+                    $image->drawRectByDetail($d);
+                    break;
                 case "list":
                     $image->drawList($d);
                 default:
