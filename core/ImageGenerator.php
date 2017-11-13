@@ -31,6 +31,7 @@ class ImageGenerator
     private $scale =1;
     private $padding = 0;
     static public $test=2;
+    public $bgHeight=0;
     private $defaultSize = 16;
 
     /**
@@ -57,7 +58,7 @@ class ImageGenerator
         $bgColor = call_user_func_array("imagecolorallocate", $paramTmp);
         imagefill($this->desImage,0,0,$bgColor);
         if($bgImage){
-            $this->drawImage($bgImage,0,0,0,0,$this->width,null,false,true);
+            list($xxx,$this->bgHeight) = $this->drawImage($bgImage,0,0,0,0,$this->width,null,false,true);
         }
         $this->padding = \CommonUtils\getProperty($selectParams,PADDING,0);
         $this->currentY = $this->currentY+$this->padding;
@@ -77,8 +78,12 @@ class ImageGenerator
         $autoHeight = $this->getProperty($this->selectParams,"autoHeight",false,null);
         $newImage = $this->desImage;
         if($autoHeight){
-            $newImage = imagecreatetruecolor($this->width,$height);
-            imagecopy($newImage,$this->desImage,0,0,0,0,$this->width,$height);
+            $newImage = imagecreatetruecolor($this->width*$this->scale,$height);
+            $realHeight = $this->bgHeight ? $this->bgHeight:$height;
+            if($realHeight<$height){
+                $realHeight = $height;
+            }
+            imagecopy($newImage,$this->desImage,0,0,0,0,$this->width*$this->scale,$realHeight);
             imagedestroy($this->desImage);
         }
         imagepng($newImage,$fileName);
@@ -338,10 +343,16 @@ class ImageGenerator
         $width = $colNum!=0?($this->width*$this->scale-$this->padding*$this->scale*2)/$colNum:0;
         $bgColor = $this->getProperty($detail,BG_COLOR,null,null);
         $preHeight=0;
+        $paddingBottom = 0;
         if($bgColor){
             $height = $this->getProperty($detail,HEIGHT,null,null)*$this->scale;
-            $width = $this->getProperty($detail,"width",null,null)*$this->scale;
-            $this->drawRect($x-$this->padding,$y,$width,$height,$bgColor);
+            $fullWidth = $this->getProperty($detail,"width",null,null)*$this->scale;
+            if(!$height && $colNum){
+                $childHeight = $this->getProperty($detail,"childHeight",null,null)*$this->scale;
+                $paddingBottom = $this->getProperty($detail,"paddingBottom",null,null)*$this->scale;
+                $height  = ceil(count($contents)/$colNum)*$childHeight;
+            }
+            $this->drawRect($x-$this->padding,$y,$fullWidth,$height+$paddingBottom,$bgColor);
         }
         $textX = 0;
         for ($i=0;$i<count($contents);$i++) {
@@ -373,7 +384,7 @@ class ImageGenerator
             }
             $rectX = $tmpX;
             if($bgColor){
-                $this->drawRect($rectX,$rectY,$width,$height,$bgColor,$radius);
+                $this->drawRect($rectX,$rectY,$width,$height,$bgColor,$radius,true);
             }
             for ($j=0;$j<count($texts);$j++){
                 $text = $texts[$j];

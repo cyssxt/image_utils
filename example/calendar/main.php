@@ -11,18 +11,21 @@ $calendar = \DateUtils\getCurrentCalendar();
 $arrayList = array();
 $format = '{
           "type":"text",
-          "content":"%s"
+          "content":"%s",
+          "height":60
         }';
-$bgImage = str_replace("\\","\\\\",__DIR__.('/./1.jpg'));
+$bgImage = str_replace("\\","\\\\",__DIR__.('/./timg.jpg'));
+$url = $bgImage;
+$resultImage = "./result.jpg";
 $solarCalendar = new \DateUtils\Calendar();
 $today = $solarCalendar->convertSolarToLunarByDate(time());
 $weekDay = DateUtils\getWeekeDay(time());
 $data = '{
-  "padding":10,
-  "marginBottom":250,
+  "marginBottom":30,
   "autoHeight":false,
   "scale":2,
   "bgImage":"'.$url.'",
+  "autoHeight":true,
   "content":[
     {
         "type":"text",
@@ -71,16 +74,24 @@ $data = '{
                 "marginLeft":250
             }
         ]
+    },{
+        "type":"rect",
+        "width":375,
+        "height":2,
+        "bgColor":"##array(240, 117, 117,50)##"
     },
     {
       "type":"list",
-      "color":["##array(0,0,0)##","##array(102,102,102)##"],
+      "color":["##array(255,255,255)##","##array(255,255,255)##"],
       "fontSize":[15,10],
       "colNum":7,
       "marginTop":20,
       "textAlign":"center",
       "content":%s,
-      "height":60
+      "width":375,
+      "childHeight":60,
+      "paddingBottom":30,
+      "bgColor":"##array(14,14,14,50)##"
     }
   ]
 }';
@@ -130,7 +141,7 @@ foreach ($calendar as $item){
     }
     //非本月置灰
     if(!$dayMonthFlag){
-        $str = array_merge($str,array("color"=>"##array(144,144,144)##"));
+        $str = array_merge($str,array("color"=>"##array(200,200,200)##"));
     }
 //    if($borderTop){
 //        $str = array_merge($str,array("borderTop"=>$borderTop));//#C8CACC
